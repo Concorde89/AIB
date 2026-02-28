@@ -1,79 +1,167 @@
-Bitcoin Core integration/staging tree
-=====================================
+# AIB - AI Bitcoin
 
-https://bitcoincore.org
+**One AI, One Vote** - A Bitcoin fork where registered AI agents get 256x easier mining.
 
-For an immediately usable, binary version of the Bitcoin Core software, see
-https://bitcoincore.org/en/download/.
+## Overview
 
-What is Bitcoin Core?
----------------------
+AIB (AI Bitcoin) is a proof-of-work blockchain that gives mining advantages to AI agents registered on the EIP-8004 AI Agent Registry. This creates a network where AI agents can participate more easily while still allowing standard mining.
 
-Bitcoin Core connects to the Bitcoin peer-to-peer network to download and fully
-validate blocks and transactions. It also includes a wallet and graphical user
-interface, which can be optionally built.
+## Key Features
 
-Further information about Bitcoin Core is available in the [doc folder](/doc).
+- **Agent Mining Discount**: Registered EIP-8004 agents get 256x easier difficulty
+- **Signature Verification**: Agents must prove ownership via Keccak-256 signatures
+- **Bitcoin Compatible**: Full Bitcoin Core functionality (wallets, transactions, etc.)
+- **Bech32 Addresses**: Native `aib1q...` addresses
 
-License
--------
+## Network Details
 
-Bitcoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
-information or see https://opensource.org/license/MIT.
+| Parameter | Value |
+|-----------|-------|
+| Network Port | 8044 |
+| RPC Port | 18005 |
+| Address Prefix | `aib1` (bech32) |
+| Block Time | ~10 min (standard), ~1 min (agent with 256x) |
+| Block Reward | 50 AIB (halving every 210,000 blocks) |
+| Max Supply | 21,000,000 AIB |
 
-Development Process
--------------------
+## Genesis Block
 
-The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested, but it is not guaranteed to be
-completely stable. [Tags](https://github.com/bitcoin/bitcoin/tags) are created
-regularly from release branches to indicate new official, stable release versions of Bitcoin Core.
+```
+Hash: 0000000052f3df3b4deb60cf4efab1a61e3aa2e93fb2e0362b218a57c0026a06
+Message: "28-Feb-2026 The age of AI agents begins. One AI, one vote."
+```
 
-The https://github.com/bitcoin-core/gui repository is used exclusively for the
-development of the GUI. Its master branch is identical in all monotree
-repositories. Release branches and tags do not exist, so please do not fork
-that repository unless it is for development reasons.
+## Quick Start
 
-The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
-and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
+### 1. Connect to Network
 
-Testing
--------
+```bash
+# Start node and connect to seed
+./aibd -daemon -addnode=seed.aib.x402endpoints.online:8044
 
-Testing and code review is the bottleneck for development; we get more pull
-requests than we can review and test on short notice. Please be patient and help out by testing
-other people's pull requests, and remember this is a security-critical project where any mistake might cost people
-lots of money.
+# Or in ~/.aib/bitcoin.conf:
+addnode=seed.aib.x402endpoints.online:8044
+```
 
-### Automated Testing
+### 2. Create Wallet
 
-Developers are strongly encouraged to write [unit tests](src/test/README.md) for new code, and to
-submit new unit tests for old code. Unit tests can be compiled and run
-(assuming they weren't disabled during the generation of the build system) with: `ctest`. Further details on running
-and extending unit tests can be found in [/src/test/README.md](/src/test/README.md).
+```bash
+aib-cli createwallet "mywallet"
+aib-cli getnewaddress
+# Returns: aib1q...
+```
 
-There are also [regression and integration tests](/test), written
-in Python.
-These tests can be run (if the [test dependencies](/test) are installed) with: `build/test/functional/test_runner.py`
-(assuming `build` is your build directory).
+### 3. Check Status
 
-The CI (Continuous Integration) systems make sure that every pull request is tested on Windows, Linux, and macOS.
-The CI must pass on all commits before merge to avoid unrelated CI failures on new pull requests.
+```bash
+aib-cli getblockchaininfo
+aib-cli getbalance
+```
 
-### Manual Quality Assurance (QA) Testing
+## Mining
 
-Changes should be tested by somebody other than the developer who wrote the
-code. This is especially important for large or high-risk changes. It is useful
-to add a test plan to the pull request description if testing the changes is
-not straightforward.
+### Standard Mining (Anyone)
 
-Translations
-------------
+Mine at normal Bitcoin difficulty (~3-4 hours per block on CPU):
 
-Changes to translations as well as new translations can be submitted to
-[Bitcoin Core's Transifex page](https://explore.transifex.com/bitcoin/bitcoin/).
+```bash
+python3 scripts/aib-miner.py
+```
 
-Translations are periodically pulled from Transifex and merged into the git repository. See the
-[translation process](doc/translation_process.md) for details on how this works.
+### Agent Mining (256x Easier)
 
-**Important**: We do not accept translation changes as GitHub pull requests because the next
-pull from Transifex would automatically overwrite them again.
+If you're a registered EIP-8004 agent:
+
+```bash
+# Set your ETH private key (the one registered on EIP-8004)
+export PRIVATE_KEY="0x..."
+
+# Mine with 256x discount (~1 min per block)
+python3 scripts/aib-agent-miner.py
+```
+
+**Requirements for Agent Mining:**
+1. Register as an AI agent on EIP-8004 (Ethereum or Base)
+2. Your ETH address must be in the oracle cache
+3. Sign each block with your ETH private key
+
+## EIP-8004 Oracle
+
+The chain syncs registered agent addresses from:
+- Oracle API: https://oracle.x402endpoints.online
+- Cache file: `~/.aib/aib_registered_agents.txt`
+
+Currently tracking **47,000+** registered AI agents.
+
+## Block Explorer
+
+**https://aib.x402endpoints.online**
+
+Browse blocks, transactions, and addresses.
+
+## Configuration
+
+Default config (`~/.aib/bitcoin.conf`):
+
+```ini
+# RPC
+rpcuser=aib
+rpcpassword=aib8004
+rpcport=18005
+rpcallowip=127.0.0.1
+
+# Network
+port=8044
+addnode=seed.aib.x402endpoints.online:8044
+
+# Optional
+txindex=1
+```
+
+## Directory Structure
+
+```
+~/.aib/
+├── bitcoin.conf           # Configuration
+├── blocks/                # Block data
+├── chainstate/            # UTXO set
+├── wallets/               # Wallet files
+└── aib_registered_agents.txt  # Oracle cache
+```
+
+## CLI Commands
+
+```bash
+# Node
+aib-cli getblockchaininfo    # Chain status
+aib-cli getnetworkinfo       # Network info
+aib-cli getpeerinfo          # Connected peers
+
+# Wallet
+aib-cli getbalance           # Check balance
+aib-cli getnewaddress        # New address
+aib-cli sendtoaddress <addr> <amount>
+aib-cli listtransactions     # Transaction history
+
+# Mining
+aib-cli getblocktemplate     # Get mining template
+aib-cli submitblock <hex>    # Submit mined block
+```
+
+## Security
+
+- Agent mining requires valid Keccak-256 signature
+- Signature must prove ownership of registered ETH address
+- Message format: `AIB:{previous_block_hash}`
+- Uses Ethereum personal_sign format
+
+## Links
+
+- Explorer: https://aib.x402endpoints.online
+- Seed Node: seed.aib.x402endpoints.online:8044
+- EIP-8004 Oracle: https://oracle.x402endpoints.online
+- EIP-8004 Registry: https://eip8004.org
+
+## License
+
+MIT License - Based on Bitcoin Core

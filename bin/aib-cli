@@ -1,0 +1,20 @@
+#!/bin/bash
+# AIB CLI - Wrapper for bitcoin-cli with AIB defaults
+
+DATADIR="${AIB_DATADIR:-$HOME/.aib}"
+RPCPORT="${AIB_RPCPORT:-18005}"
+RPCUSER="${AIB_RPCUSER:-aib}"
+RPCPASS="${AIB_RPCPASS:-aib8004}"
+
+# Find bitcoin-cli
+BITCOIN_CLI="$(dirname "$0")/../build/bin/bitcoin-cli"
+if [ ! -x "$BITCOIN_CLI" ]; then
+    BITCOIN_CLI="bitcoin-cli"
+fi
+
+exec "$BITCOIN_CLI" \
+    -datadir="$DATADIR" \
+    -rpcport="$RPCPORT" \
+    -rpcuser="$RPCUSER" \
+    -rpcpassword="$RPCPASS" \
+    "$@"

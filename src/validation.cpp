@@ -37,6 +37,8 @@
 #include <policy/settings.h>
 #include <policy/truc_policy.h>
 #include <pow.h>
+#include <aib/oracle.h>
+#include <aib/pow_aib.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -3860,8 +3862,14 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
-        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+    // NOTE: For AIB, we allow headers with "high-hash" through this check
+    // because full block validation (CheckBlock) will verify agent discounts.
+    // The actual PoW check happens in CheckBlock with agent discount support.
+    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams)) {
+        // AIB: Don't fail here - let CheckBlock handle it with agent discount
+        LogDebug(BCLog::VALIDATION, "AIB: Header PoW check deferred to full block validation\n");
+        // return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+    }
 
     return true;
 }
@@ -3954,10 +3962,29 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     if (block.fChecked)
         return true;
 
-    // Check that the header is valid (particularly PoW).  This is mostly
-    // redundant with the call in AcceptBlockHeader.
-    if (!CheckBlockHeader(block, state, consensusParams, fCheckPOW))
+    // AIB: Check header without PoW first (validates other fields)
+    if (!CheckBlockHeader(block, state, consensusParams, false))
         return false;
+
+    // AIB: Now check PoW with agent discount support
+    if (fCheckPOW) {
+        // First try standard PoW check
+        if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams)) {
+            // Standard check failed - try with agent discount if we have coinbase
+            if (!block.vtx.empty() && block.vtx[0]->IsCoinBase()) {
+                std::optional<CTransaction> coinbase(*block.vtx[0]);
+                // Pass hashPrevBlock for signature verification
+                if (!aib::CheckProofOfWorkWithAgentDiscount(block.GetHash(), block.nBits, 
+                        consensusParams, coinbase, block.hashPrevBlock)) {
+                    return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+                }
+                // Agent discount applied and passed!
+                LogDebug(BCLog::VALIDATION, "AIB: Block accepted with agent difficulty discount\n");
+            } else {
+                return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+            }
+        }
+    }
 
     // Signet only: check block solution
     if (consensusParams.signet_blocks && fCheckPOW && !CheckSignetBlockSolution(block, consensusParams)) {
