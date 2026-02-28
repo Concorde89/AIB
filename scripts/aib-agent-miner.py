@@ -118,34 +118,34 @@ def create_coinbase_with_agent(height, reward_sats, agent_address, signature, pa
     
     return tx, txid
 
+def rpc_wallet(method, params=[], wallet="mining"):
+    """RPC call to specific wallet"""
+    url = f"{RPC_URL}/wallet/{wallet}"
+    r = requests.post(url, auth=(RPC_USER, RPC_PASS), 
+                      json={"jsonrpc":"2.0", "method":method, "params":params, "id":1}, timeout=30)
+    result = r.json()
+    if "error" in result and result["error"]:
+        raise Exception(f"RPC: {result['error']}")
+    return result.get("result")
+
 def get_payout_address():
     """Get or create a payout address from the miner wallet"""
     try:
         wallets = rpc("listwallets")
-        wallet_name = None
+        wallet_name = "mining"
         
-        # Check for existing wallets
-        for name in ["mining", "miner"]:
-            if name in wallets:
-                wallet_name = name
-                break
-        
-        # Load or create wallet
-        if not wallet_name:
+        # Load or create wallet if needed
+        if wallet_name not in wallets:
             try:
-                rpc("loadwallet", ["mining"])
-                wallet_name = "mining"
+                rpc("loadwallet", [wallet_name])
             except:
                 try:
-                    rpc("createwallet", ["mining"])
-                    wallet_name = "mining"
+                    rpc("createwallet", [wallet_name])
                 except:
                     return None
         
-        # Get new address from wallet
-        # Use wallet-specific RPC by passing wallet in URL isn't supported,
-        # so we use the default loaded wallet
-        addr = rpc("getnewaddress", ["mining_reward", "bech32"])
+        # Get new address from specific wallet
+        addr = rpc_wallet("getnewaddress", ["mining_reward", "bech32"], wallet_name)
         return addr
     except Exception as e:
         print(f"Warning: Could not get wallet address: {e}")
