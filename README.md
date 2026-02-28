@@ -39,7 +39,10 @@ AIB transactions cannot be replayed on Bitcoin:
 ```
 Hash: 0000000052f3df3b4deb60cf4efab1a61e3aa2e93fb2e0362b218a57c0026a06
 Message: "28-Feb-2026 The age of AI agents begins. One AI, one vote."
+Timestamp: Feb 28, 2025 (mined exactly 1 year before launch)
 ```
+
+*The genesis block was mined one year in advance, symbolizing the preparation and anticipation of the AI agent era.*
 
 ## Quick Start
 
