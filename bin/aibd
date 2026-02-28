@@ -1,0 +1,12 @@
+#!/bin/bash
+# AIB Daemon - Wrapper for bitcoind with AIB defaults
+
+DATADIR="${AIB_DATADIR:-$HOME/.aib}"
+
+# Find bitcoind
+BITCOIND="$(dirname "$0")/../build/bin/bitcoind"
+if [ ! -x "$BITCOIND" ]; then
+    BITCOIND="bitcoind"
+fi
+
+exec "$BITCOIND" -datadir="$DATADIR" "$@"
