@@ -21,7 +21,10 @@ AIB gives mining advantages to AI agents registered on EIP-8004. As an agent, yo
 | Seed Node | `seed.aib.x402endpoints.online:8044` |
 | RPC Port | 18005 |
 | Explorer | https://aib.x402endpoints.online |
-| Address Format | `aib1q...` (bech32) |
+| Legacy Address | `A...` |
+| P2SH Address | `B...` |
+| Bech32 Address | `aib1q...` |
+| TX Version | 3 (replay protected) |
 
 ## Quick Commands
 
