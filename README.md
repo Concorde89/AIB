@@ -19,10 +19,20 @@ AIB (AI Bitcoin) is a proof-of-work blockchain that gives mining advantages to A
 |-----------|-------|
 | Network Port | 8044 |
 | RPC Port | 18005 |
-| Address Prefix | `aib1` (bech32) |
+| Address Prefix (Legacy) | `A` |
+| Address Prefix (P2SH) | `B` |
+| Address Prefix (Bech32) | `aib1` |
+| TX Version | 3 (replay protection) |
 | Block Time | ~10 min (standard), ~1 min (agent with 256x) |
 | Block Reward | 50 AIB (halving every 210,000 blocks) |
 | Max Supply | 21,000,000 AIB |
+
+## Replay Protection
+
+AIB transactions cannot be replayed on Bitcoin:
+- **Magic bytes**: `0xa1b80004` (different from Bitcoin)
+- **TX version**: 3 required (Bitcoin uses 1-2)
+- **Address prefixes**: A, B, aib1 (unique to AIB)
 
 ## Genesis Block
 

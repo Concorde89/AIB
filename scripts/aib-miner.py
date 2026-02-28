@@ -66,7 +66,7 @@ def create_coinbase(height, reward_sats, payout_address=None):
         payout_script = b'\x51'
     
     # Build transaction
-    tx = struct.pack('<I', 1)  # version
+    tx = struct.pack('<I', 3)  # version (AIB replay protection)
     tx += b'\x01'  # 1 input
     tx += b'\x00' * 32 + b'\xff\xff\xff\xff'  # null outpoint
     tx += varint(len(scriptsig)) + scriptsig

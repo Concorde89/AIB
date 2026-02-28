@@ -8,8 +8,18 @@
 #include <primitives/transaction.h>
 #include <consensus/validation.h>
 
+// AIB requires transaction version >= 3 for replay protection
+static constexpr int32_t AIB_MIN_TX_VERSION = 3;
+
 bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
 {
+    // AIB: Require minimum transaction version for replay protection
+    // This ensures AIB transactions are invalid on Bitcoin (which uses version 1 or 2)
+    // Note: Coinbase transactions (no inputs) are exempt as they can't be replayed
+    if (tx.version < AIB_MIN_TX_VERSION && !tx.IsCoinBase()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-version-too-low");
+    }
+
     // Basic checks that don't depend on any context
     if (tx.vin.empty())
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vin-empty");

@@ -100,7 +100,7 @@ def create_coinbase_with_agent(height, reward_sats, agent_address, signature, pa
         payout_script = b'\x51'
     
     # Build NON-SEGWIT transaction (no witness data)
-    tx = struct.pack('<I', 1)  # version
+    tx = struct.pack('<I', 3)  # version (AIB replay protection)
     tx += b'\x01'  # 1 input
     tx += b'\x00' * 32 + b'\xff\xff\xff\xff'  # null outpoint
     tx += varint(len(scriptsig)) + scriptsig
