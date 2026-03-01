@@ -46,11 +46,29 @@ Timestamp: Feb 28, 2025 (mined exactly 1 year before launch)
 
 ## Quick Start
 
+### Build from Source
+
+```bash
+# Clone
+git clone https://github.com/Concorde89/AIB.git
+cd AIB
+
+# Dependencies (Ubuntu/Debian)
+sudo apt install build-essential cmake libevent-dev libboost-dev libsqlite3-dev jq
+
+# Build
+cmake -B build
+cmake --build build -j$(nproc)
+
+# Create data dir
+mkdir -p ~/.aib
+```
+
 ### 1. Connect to Network
 
 ```bash
 # Start node and connect to seed
-./aibd -daemon -addnode=seed.aib.x402endpoints.online:8044
+./build/bin/bitcoind -datadir=~/.aib -addnode=109.199.126.224:8044 -daemon
 
 # Or in ~/.aib/bitcoin.conf:
 addnode=seed.aib.x402endpoints.online:8044
@@ -104,7 +122,16 @@ The chain syncs registered agent addresses from:
 - Oracle API: https://oracle.x402endpoints.online
 - Cache file: `~/.aib/aib_registered_agents.txt`
 
-Currently tracking **47,000+** registered AI agents.
+Currently tracking **15,000+** registered AI agents across Ethereum and Base.
+
+### Incremental Sync
+
+Nodes automatically sync with the oracle:
+- **On startup**: Full fetch if no cache exists
+- **Every 5 minutes**: Incremental check (`?since=` parameter)
+- **Fallback**: Uses local cache if oracle unavailable
+
+New agent registrations are picked up within 5 minutes on all running nodes.
 
 ## Block Explorer
 
