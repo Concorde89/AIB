@@ -14,10 +14,92 @@
 #include <algorithm>
 #include <cstdlib>
 
+// For HTTP fetch
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
 namespace aib {
 
 // File-based cache for registered addresses
 static const std::string CACHE_FILENAME = "aib_registered_agents.txt";
+static const std::string ORACLE_HOST = "oracle.x402endpoints.online";
+static const std::string ORACLE_PATH = "/v1/addresses";
+static const int ORACLE_PORT = 443;
+static const int HTTP_TIMEOUT_SECONDS = 10;
+
+// Simple HTTP GET (non-SSL for now, will redirect through port 80 or use direct IP)
+static std::string HttpGet(const std::string& host, int port, const std::string& path) {
+    std::string result;
+    
+    // Resolve hostname
+    struct hostent* server = gethostbyname(host.c_str());
+    if (!server) {
+        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to resolve %s\n", host.c_str());
+        return "";
+    }
+    
+    // Create socket
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to create socket\n");
+        return "";
+    }
+    
+    // Set timeout
+    struct timeval timeout;
+    timeout.tv_sec = HTTP_TIMEOUT_SECONDS;
+    timeout.tv_usec = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    
+    // Connect
+    struct sockaddr_in serv_addr;
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+    serv_addr.sin_port = htons(port);
+    
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to connect to %s:%d\n", host.c_str(), port);
+        close(sockfd);
+        return "";
+    }
+    
+    // Send HTTP request
+    std::string request = "GET " + path + " HTTP/1.1\r\n"
+                         "Host: " + host + "\r\n"
+                         "Connection: close\r\n"
+                         "User-Agent: AIB-Node/1.0\r\n"
+                         "\r\n";
+    
+    if (send(sockfd, request.c_str(), request.length(), 0) < 0) {
+        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to send request\n");
+        close(sockfd);
+        return "";
+    }
+    
+    // Receive response
+    char buffer[4096];
+    std::string response;
+    ssize_t bytes;
+    while ((bytes = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes] = '\0';
+        response += buffer;
+    }
+    
+    close(sockfd);
+    
+    // Skip HTTP headers, find body after \r\n\r\n
+    size_t body_start = response.find("\r\n\r\n");
+    if (body_start != std::string::npos) {
+        result = response.substr(body_start + 4);
+    }
+    
+    return result;
+}
 
 Oracle& Oracle::GetInstance() {
     static Oracle instance;
@@ -53,10 +135,11 @@ void Oracle::LoadCacheFromFile() {
     m_registered_addresses.insert("0xf5a8dc606ee66cfaf49aad9c2e35cff58ae68ddd");
     
     const char* home = std::getenv("HOME");
+    std::string cacheDir = std::string(home ? home : ".") + "/.aib/";
     std::vector<std::string> paths = {
         CACHE_FILENAME,
         "/var/lib/aib/" + CACHE_FILENAME,
-        std::string(home ? home : ".") + "/.aib/" + CACHE_FILENAME,
+        cacheDir + CACHE_FILENAME,
     };
     
     for (const auto& path : paths) {
@@ -78,8 +161,46 @@ void Oracle::LoadCacheFromFile() {
         }
     }
     
-    // No file found, but we still have bootstrap address
-    LogInfo("AIB Oracle: Using bootstrap agent (no cache file)\n");
+    // No local file - try HTTP fetch from oracle
+    LogInfo("AIB Oracle: No cache file, fetching from %s\n", ORACLE_HOST.c_str());
+    std::string response = HttpGet(ORACLE_HOST, 80, ORACLE_PATH);  // Try HTTP first
+    
+    if (response.empty()) {
+        LogDebug(BCLog::VALIDATION, "AIB Oracle: HTTP fetch failed, using bootstrap only\n");
+        m_last_reload = std::chrono::steady_clock::now();
+        return;
+    }
+    
+    // Parse response (one address per line)
+    std::istringstream stream(response);
+    std::string line;
+    int count = 0;
+    while (std::getline(stream, line)) {
+        // Remove any whitespace/newlines
+        line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+        if (line.empty()) continue;
+        std::transform(line.begin(), line.end(), line.begin(), ::tolower);
+        if (line.length() == 42 && line.substr(0, 2) == "0x") {
+            m_registered_addresses.insert(line);
+            count++;
+        }
+    }
+    
+    if (count > 0) {
+        LogInfo("AIB Oracle: Fetched %d agents from HTTP\n", count);
+        
+        // Save to cache file for next time
+        std::ofstream cacheFile(cacheDir + CACHE_FILENAME);
+        if (cacheFile.is_open()) {
+            for (const auto& addr : m_registered_addresses) {
+                cacheFile << addr << "\n";
+            }
+            cacheFile.close();
+            LogDebug(BCLog::VALIDATION, "AIB Oracle: Saved cache to %s\n", 
+                     (cacheDir + CACHE_FILENAME).c_str());
+        }
+    }
+    
     m_last_reload = std::chrono::steady_clock::now();
 }
 
