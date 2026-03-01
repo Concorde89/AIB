@@ -48,6 +48,10 @@ bool Oracle::ShouldReloadCache() {
 void Oracle::LoadCacheFromFile() {
     m_registered_addresses.clear();
     
+    // Bootstrap: Always include the genesis miner address
+    // This ensures blocks can validate even without external oracle
+    m_registered_addresses.insert("0xf5a8dc606ee66cfaf49aad9c2e35cff58ae68ddd");
+    
     const char* home = std::getenv("HOME");
     std::vector<std::string> paths = {
         CACHE_FILENAME,
@@ -74,7 +78,8 @@ void Oracle::LoadCacheFromFile() {
         }
     }
     
-    LogDebug(BCLog::VALIDATION, "AIB Oracle: No cache file found\n");
+    // No file found, but we still have bootstrap address
+    LogInfo("AIB Oracle: Using bootstrap agent (no cache file)\n");
     m_last_reload = std::chrono::steady_clock::now();
 }
 
