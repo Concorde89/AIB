@@ -32,12 +32,16 @@ static int64_t g_last_sync_timestamp = 0;
 
 // Fetch addresses using curl subprocess (handles HTTPS)
 // If since > 0, only fetch changes since that timestamp
+// Returns one address per line (uses jq to extract from JSON)
 static std::string FetchFromOracle(int64_t since = 0) {
     std::string url = "https://" + ORACLE_HOST + ORACLE_PATH;
     if (since > 0) {
         url += "?since=" + std::to_string(since);
     }
-    std::string cmd = "curl -sf --max-time 10 \"" + url + "\" 2>/dev/null";
+    // Oracle returns JSON: {"addresses": [...], "unchanged": bool}
+    // Use jq to extract: if unchanged=true return "UNCHANGED", else return addresses one per line
+    std::string cmd = "curl -sf --max-time 10 \"" + url + "\" 2>/dev/null | "
+                      "jq -r 'if .unchanged == true then \"UNCHANGED\" else .addresses[]? // empty end' 2>/dev/null";
     
     FILE* pipe = popen(cmd.c_str(), "r");
     if (!pipe) {
@@ -103,9 +107,8 @@ void Oracle::LoadCacheFromFile() {
     std::string response = FetchFromOracle(incremental ? g_last_sync_timestamp : 0);
     
     if (!response.empty()) {
-        // Check if response indicates no changes (unchanged: true)
-        if (response.find("\"unchanged\":true") != std::string::npos || 
-            response.find("\"unchanged\": true") != std::string::npos) {
+        // Check if response indicates no changes (jq returns "UNCHANGED")
+        if (response.find("UNCHANGED") != std::string::npos) {
             LogInfo("AIB Oracle: No new agents\n");
             g_last_sync_timestamp = std::time(nullptr);
             m_last_reload = std::chrono::steady_clock::now();
