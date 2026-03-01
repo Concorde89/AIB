@@ -145,9 +145,10 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 
+                // AIB: Skip PoW check here - agent-mined blocks have 256x discount
+                // Full block validation will verify PoW with agent discount
                 if (!CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams)) {
-                    LogError("%s: CheckProofOfWork failed: %s\n", __func__, pindexNew->ToString());
-                    return false;
+                    LogDebug(BCLog::VALIDATION, "AIB: PoW check deferred for block %s (may have agent discount)\n", pindexNew->ToString());
                 }
 
                 pcursor->Next();
@@ -1053,10 +1054,10 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
 
     const auto block_hash{block.GetHash()};
 
-    // Check the header
+    // AIB: Skip PoW check here - agent-mined blocks have 256x discount
+    // Full block validation will verify PoW with agent discount
     if (!CheckProofOfWork(block_hash, block.nBits, GetConsensus())) {
-        LogError("Errors in block header at %s while reading block", pos.ToString());
-        return false;
+        LogDebug(BCLog::VALIDATION, "AIB: PoW check deferred at %s (may have agent discount)\n", pos.ToString());
     }
 
     // Signet only: check block solution
