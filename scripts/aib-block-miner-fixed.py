@@ -147,41 +147,67 @@ def create_coinbase_tx(height, value_sats, witness_commitment=None, agent_signat
     
     return tx
 
+def parse_varint(data, pos):
+    """Parse Bitcoin varint, return (value, new_pos)"""
+    first = data[pos]
+    if first < 0xfd:
+        return first, pos + 1
+    elif first == 0xfd:
+        return struct.unpack('<H', data[pos+1:pos+3])[0], pos + 3
+    elif first == 0xfe:
+        return struct.unpack('<I', data[pos+1:pos+5])[0], pos + 5
+    else:
+        return struct.unpack('<Q', data[pos+1:pos+9])[0], pos + 9
+
 def get_coinbase_txid(coinbase_tx):
-    """Get txid of coinbase (without witness)"""
-    # Parse and strip witness for txid calculation
-    # For simplicity, we rebuild without witness
+    """Get txid of coinbase (without witness) - proper parsing"""
     tx = coinbase_tx
+    pos = 0
     
-    # Skip version (4) + marker (1) + flag (1)
-    pos = 6
+    # Version (4 bytes)
+    version = tx[0:4]
+    pos = 4
+    
+    # Check for SegWit marker/flag
+    has_witness = False
+    if tx[pos] == 0x00 and tx[pos+1] == 0x01:
+        has_witness = True
+        pos += 2  # Skip marker and flag
     
     # Input count
-    input_count = tx[pos]
-    pos += 1
+    input_count, pos = parse_varint(tx, pos)
     
-    # Skip input (32 + 4 + varint + scriptsig + 4)
-    pos += 32 + 4  # txid + index
-    scriptsig_len = tx[pos]
-    pos += 1 + scriptsig_len + 4  # varint + scriptsig + sequence
+    # Store inputs start position
+    inputs_start = pos
+    
+    # Skip inputs
+    for _ in range(input_count):
+        pos += 32 + 4  # prev_txid + prev_index
+        script_len, pos = parse_varint(tx, pos)
+        pos += script_len + 4  # scriptsig + sequence
+    
+    inputs_end = pos
     
     # Output count
-    output_count = tx[pos]
-    pos += 1
+    output_count, pos = parse_varint(tx, pos)
+    
+    # Store outputs start position  
+    outputs_start = pos
     
     # Skip outputs
     for _ in range(output_count):
         pos += 8  # value
-        script_len = tx[pos]
-        pos += 1 + script_len
+        script_len, pos = parse_varint(tx, pos)
+        pos += script_len
     
-    # Now we're at witness data - skip it
-    # Rebuild tx without witness
-    non_witness = struct.pack('<I', 1)  # version
-    non_witness += b'\x01'  # input count
-    non_witness += b'\x00' * 32 + b'\xff\xff\xff\xff'  # null input
-    non_witness += tx[7:7+1+tx[7]+4]  # scriptsig with length + sequence
-    non_witness += tx[7+1+tx[7]+4:pos]  # outputs
+    outputs_end = pos
+    
+    # Build non-witness serialization for txid
+    non_witness = version  # version
+    non_witness += int_to_varint(input_count)
+    non_witness += tx[inputs_start:inputs_end]  # inputs
+    non_witness += int_to_varint(output_count)
+    non_witness += tx[outputs_start:outputs_end]  # outputs
     non_witness += struct.pack('<I', 0)  # locktime
     
     return sha256d(non_witness)
