@@ -99,6 +99,12 @@ Note: Standard mining takes ~3-4 hours per block on CPU.
 ## Starting a Node
 
 ```bash
+# Clone and build
+git clone https://github.com/Concorde89/AIB.git
+cd AIB
+sudo apt install build-essential cmake libevent-dev libboost-dev libsqlite3-dev jq
+cmake -B build && cmake --build build -j$(nproc)
+
 # Create data directory
 mkdir -p ~/.aib
 
@@ -108,16 +114,17 @@ rpcuser=aib
 rpcpassword=aib8004
 rpcport=18005
 port=8044
-addnode=seed.aib.x402endpoints.online:8044
 txindex=1
 EOF
 
-# Start node
-~/clawd/aib-coin/bin/aibd -daemon
+# Start node (connects to seed automatically via DNS)
+./build/bin/bitcoind -datadir=~/.aib -addnode=109.199.126.224:8044 -daemon
 
 # Check status
-~/clawd/aib-coin/bin/aib-cli getblockchaininfo
+./build/bin/bitcoin-cli -datadir=~/.aib getblockchaininfo
 ```
+
+**Note:** Requires `jq` for oracle JSON parsing. Oracle cache auto-syncs every 5 minutes.
 
 ## File Locations
 
