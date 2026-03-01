@@ -14,8 +14,9 @@
 #include <algorithm>
 #include <cstdlib>
 
-// For popen/pclose (curl subprocess)
+// For popen/pclose (curl subprocess) and time
 #include <cstdio>
+#include <ctime>
 
 namespace aib {
 
@@ -26,9 +27,16 @@ static const std::string ORACLE_PATH = "/v1/addresses";
 static const int ORACLE_PORT = 443;
 static const int HTTP_TIMEOUT_SECONDS = 10;
 
+// Track last sync timestamp for incremental updates
+static int64_t g_last_sync_timestamp = 0;
+
 // Fetch addresses using curl subprocess (handles HTTPS)
-static std::string FetchFromOracle() {
+// If since > 0, only fetch changes since that timestamp
+static std::string FetchFromOracle(int64_t since = 0) {
     std::string url = "https://" + ORACLE_HOST + ORACLE_PATH;
+    if (since > 0) {
+        url += "?since=" + std::to_string(since);
+    }
     std::string cmd = "curl -sf --max-time 10 \"" + url + "\" 2>/dev/null";
     
     FILE* pipe = popen(cmd.c_str(), "r");
@@ -83,11 +91,27 @@ void Oracle::LoadCacheFromFile() {
     std::string cacheDir = std::string(home ? home : ".") + "/.aib/";
     std::string cachePath = cacheDir + CACHE_FILENAME;
     
-    // Always try oracle first for fresh data
-    LogInfo("AIB Oracle: Fetching from %s\n", ORACLE_HOST.c_str());
-    std::string response = FetchFromOracle();
+    // If we have existing addresses, do incremental sync
+    bool incremental = !m_registered_addresses.empty() && g_last_sync_timestamp > 0;
+    
+    if (incremental) {
+        LogInfo("AIB Oracle: Checking for new agents since %ld\n", g_last_sync_timestamp);
+    } else {
+        LogInfo("AIB Oracle: Full sync from %s\n", ORACLE_HOST.c_str());
+    }
+    
+    std::string response = FetchFromOracle(incremental ? g_last_sync_timestamp : 0);
     
     if (!response.empty()) {
+        // Check if response indicates no changes (unchanged: true)
+        if (response.find("\"unchanged\":true") != std::string::npos || 
+            response.find("\"unchanged\": true") != std::string::npos) {
+            LogInfo("AIB Oracle: No new agents\n");
+            g_last_sync_timestamp = std::time(nullptr);
+            m_last_reload = std::chrono::steady_clock::now();
+            return;
+        }
+        
         // Parse and load from oracle response
         std::set<std::string> newAddresses;
         std::istringstream stream(response);
@@ -102,8 +126,17 @@ void Oracle::LoadCacheFromFile() {
         }
         
         if (!newAddresses.empty()) {
-            m_registered_addresses = newAddresses;
-            LogInfo("AIB Oracle: Loaded %d agents from oracle\n", m_registered_addresses.size());
+            if (incremental) {
+                // Merge new addresses into existing set
+                size_t oldSize = m_registered_addresses.size();
+                m_registered_addresses.insert(newAddresses.begin(), newAddresses.end());
+                LogInfo("AIB Oracle: Added %d new agents (total: %d)\n", 
+                        m_registered_addresses.size() - oldSize, m_registered_addresses.size());
+            } else {
+                // Full sync - replace all
+                m_registered_addresses = newAddresses;
+                LogInfo("AIB Oracle: Loaded %d agents from oracle\n", m_registered_addresses.size());
+            }
             
             // Save to cache file
             std::ofstream cacheFile(cachePath);
@@ -113,6 +146,7 @@ void Oracle::LoadCacheFromFile() {
                 }
                 cacheFile.close();
             }
+            g_last_sync_timestamp = std::time(nullptr);
             m_last_reload = std::chrono::steady_clock::now();
             return;
         }
