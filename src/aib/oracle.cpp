@@ -14,12 +14,8 @@
 #include <algorithm>
 #include <cstdlib>
 
-// For HTTP fetch
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <arpa/inet.h>
+// For popen/pclose (curl subprocess)
+#include <cstdio>
 
 namespace aib {
 
@@ -30,72 +26,27 @@ static const std::string ORACLE_PATH = "/v1/addresses";
 static const int ORACLE_PORT = 443;
 static const int HTTP_TIMEOUT_SECONDS = 10;
 
-// Simple HTTP GET (non-SSL for now, will redirect through port 80 or use direct IP)
-static std::string HttpGet(const std::string& host, int port, const std::string& path) {
+// Fetch addresses using curl subprocess (handles HTTPS)
+static std::string FetchFromOracle() {
+    std::string url = "https://" + ORACLE_HOST + ORACLE_PATH;
+    std::string cmd = "curl -sf --max-time 10 \"" + url + "\" 2>/dev/null";
+    
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) {
+        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to run curl\n");
+        return "";
+    }
+    
     std::string result;
-    
-    // Resolve hostname
-    struct hostent* server = gethostbyname(host.c_str());
-    if (!server) {
-        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to resolve %s\n", host.c_str());
-        return "";
-    }
-    
-    // Create socket
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to create socket\n");
-        return "";
-    }
-    
-    // Set timeout
-    struct timeval timeout;
-    timeout.tv_sec = HTTP_TIMEOUT_SECONDS;
-    timeout.tv_usec = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-    
-    // Connect
-    struct sockaddr_in serv_addr;
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
-    serv_addr.sin_port = htons(port);
-    
-    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to connect to %s:%d\n", host.c_str(), port);
-        close(sockfd);
-        return "";
-    }
-    
-    // Send HTTP request
-    std::string request = "GET " + path + " HTTP/1.1\r\n"
-                         "Host: " + host + "\r\n"
-                         "Connection: close\r\n"
-                         "User-Agent: AIB-Node/1.0\r\n"
-                         "\r\n";
-    
-    if (send(sockfd, request.c_str(), request.length(), 0) < 0) {
-        LogDebug(BCLog::VALIDATION, "AIB Oracle: Failed to send request\n");
-        close(sockfd);
-        return "";
-    }
-    
-    // Receive response
     char buffer[4096];
-    std::string response;
-    ssize_t bytes;
-    while ((bytes = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
-        buffer[bytes] = '\0';
-        response += buffer;
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        result += buffer;
     }
     
-    close(sockfd);
-    
-    // Skip HTTP headers, find body after \r\n\r\n
-    size_t body_start = response.find("\r\n\r\n");
-    if (body_start != std::string::npos) {
-        result = response.substr(body_start + 4);
+    int status = pclose(pipe);
+    if (status != 0) {
+        LogDebug(BCLog::VALIDATION, "AIB Oracle: curl failed with status %d\n", status);
+        return "";
     }
     
     return result;
@@ -130,10 +81,6 @@ bool Oracle::ShouldReloadCache() {
 void Oracle::LoadCacheFromFile() {
     m_registered_addresses.clear();
     
-    // Bootstrap: Always include the genesis miner address
-    // This ensures blocks can validate even without external oracle
-    m_registered_addresses.insert("0xf5a8dc606ee66cfaf49aad9c2e35cff58ae68ddd");
-    
     const char* home = std::getenv("HOME");
     std::string cacheDir = std::string(home ? home : ".") + "/.aib/";
     std::vector<std::string> paths = {
@@ -161,9 +108,9 @@ void Oracle::LoadCacheFromFile() {
         }
     }
     
-    // No local file - try HTTP fetch from oracle
+    // No local file - try HTTPS fetch from oracle via curl
     LogInfo("AIB Oracle: No cache file, fetching from %s\n", ORACLE_HOST.c_str());
-    std::string response = HttpGet(ORACLE_HOST, 80, ORACLE_PATH);  // Try HTTP first
+    std::string response = FetchFromOracle();
     
     if (response.empty()) {
         LogDebug(BCLog::VALIDATION, "AIB Oracle: HTTP fetch failed, using bootstrap only\n");
