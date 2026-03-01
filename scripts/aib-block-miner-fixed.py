@@ -90,12 +90,16 @@ def create_coinbase_tx(height, value_sats, witness_commitment=None, agent_signat
     extra_nonce = os.urandom(4)
     scriptsig = height_script + bytes([len(extra_nonce)]) + extra_nonce
     
+    # Determine if we need SegWit format (only if we have witness commitment)
+    use_segwit = witness_commitment is not None
+    
     # Build transaction
     tx = b''
     tx += struct.pack('<I', 1)  # version
     
-    # SegWit marker and flag
-    tx += b'\x00\x01'
+    # SegWit marker and flag (only if we have witness transactions)
+    if use_segwit:
+        tx += b'\x00\x01'
     
     # Input (coinbase)
     tx += b'\x01'  # input count
@@ -139,9 +143,10 @@ def create_coinbase_tx(height, value_sats, witness_commitment=None, agent_signat
         commitment_script = bytes.fromhex("6a24aa21a9ed") + witness_commitment
         tx += int_to_varint(len(commitment_script)) + commitment_script
     
-    # Witness (required for segwit coinbase)
-    tx += b'\x01'  # witness stack count
-    tx += b'\x20' + b'\x00' * 32  # witness reserved value
+    # Witness data (only for SegWit coinbase)
+    if use_segwit:
+        tx += b'\x01'  # witness stack count
+        tx += b'\x20' + b'\x00' * 32  # witness reserved value
     
     tx += struct.pack('<I', 0)  # locktime
     
