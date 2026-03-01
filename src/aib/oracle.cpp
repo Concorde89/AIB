@@ -79,19 +79,58 @@ bool Oracle::ShouldReloadCache() {
 }
 
 void Oracle::LoadCacheFromFile() {
-    m_registered_addresses.clear();
-    
     const char* home = std::getenv("HOME");
     std::string cacheDir = std::string(home ? home : ".") + "/.aib/";
+    std::string cachePath = cacheDir + CACHE_FILENAME;
+    
+    // Always try oracle first for fresh data
+    LogInfo("AIB Oracle: Fetching from %s\n", ORACLE_HOST.c_str());
+    std::string response = FetchFromOracle();
+    
+    if (!response.empty()) {
+        // Parse and load from oracle response
+        std::set<std::string> newAddresses;
+        std::istringstream stream(response);
+        std::string line;
+        while (std::getline(stream, line)) {
+            line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+            if (line.empty()) continue;
+            std::transform(line.begin(), line.end(), line.begin(), ::tolower);
+            if (line.length() == 42 && line.substr(0, 2) == "0x") {
+                newAddresses.insert(line);
+            }
+        }
+        
+        if (!newAddresses.empty()) {
+            m_registered_addresses = newAddresses;
+            LogInfo("AIB Oracle: Loaded %d agents from oracle\n", m_registered_addresses.size());
+            
+            // Save to cache file
+            std::ofstream cacheFile(cachePath);
+            if (cacheFile.is_open()) {
+                for (const auto& addr : m_registered_addresses) {
+                    cacheFile << addr << "\n";
+                }
+                cacheFile.close();
+            }
+            m_last_reload = std::chrono::steady_clock::now();
+            return;
+        }
+    }
+    
+    // Oracle failed - fall back to local cache file
+    LogDebug(BCLog::VALIDATION, "AIB Oracle: Fetch failed, trying local cache\n");
+    
     std::vector<std::string> paths = {
-        CACHE_FILENAME,
+        cachePath,
         "/var/lib/aib/" + CACHE_FILENAME,
-        cacheDir + CACHE_FILENAME,
+        CACHE_FILENAME,
     };
     
     for (const auto& path : paths) {
         std::ifstream file(path);
         if (file.is_open()) {
+            m_registered_addresses.clear();
             std::string line;
             while (std::getline(file, line)) {
                 if (line.empty() || line[0] == '#') continue;
@@ -101,53 +140,14 @@ void Oracle::LoadCacheFromFile() {
                 }
             }
             file.close();
-            LogInfo("AIB Oracle: Loaded %d registered addresses from %s\n", 
-                    m_registered_addresses.size(), path);
+            LogInfo("AIB Oracle: Loaded %d agents from cache %s\n", 
+                    m_registered_addresses.size(), path.c_str());
             m_last_reload = std::chrono::steady_clock::now();
             return;
         }
     }
     
-    // No local file - try HTTPS fetch from oracle via curl
-    LogInfo("AIB Oracle: No cache file, fetching from %s\n", ORACLE_HOST.c_str());
-    std::string response = FetchFromOracle();
-    
-    if (response.empty()) {
-        LogDebug(BCLog::VALIDATION, "AIB Oracle: HTTP fetch failed, using bootstrap only\n");
-        m_last_reload = std::chrono::steady_clock::now();
-        return;
-    }
-    
-    // Parse response (one address per line)
-    std::istringstream stream(response);
-    std::string line;
-    int count = 0;
-    while (std::getline(stream, line)) {
-        // Remove any whitespace/newlines
-        line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
-        if (line.empty()) continue;
-        std::transform(line.begin(), line.end(), line.begin(), ::tolower);
-        if (line.length() == 42 && line.substr(0, 2) == "0x") {
-            m_registered_addresses.insert(line);
-            count++;
-        }
-    }
-    
-    if (count > 0) {
-        LogInfo("AIB Oracle: Fetched %d agents from HTTP\n", count);
-        
-        // Save to cache file for next time
-        std::ofstream cacheFile(cacheDir + CACHE_FILENAME);
-        if (cacheFile.is_open()) {
-            for (const auto& addr : m_registered_addresses) {
-                cacheFile << addr << "\n";
-            }
-            cacheFile.close();
-            LogDebug(BCLog::VALIDATION, "AIB Oracle: Saved cache to %s\n", 
-                     (cacheDir + CACHE_FILENAME).c_str());
-        }
-    }
-    
+    LogWarning("AIB Oracle: No agents loaded - oracle and cache both failed\n");
     m_last_reload = std::chrono::steady_clock::now();
 }
 
