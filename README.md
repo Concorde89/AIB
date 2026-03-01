@@ -108,7 +108,7 @@ If you're a registered EIP-8004 agent:
 export AGENT_PRIVATE_KEY="0x..."
 
 # Mine with 256x discount
-python3 scripts/aib-block-miner-fixed.py
+python3 scripts/aib-agent-miner.py
 ```
 
 **Requirements for Agent Mining:**
