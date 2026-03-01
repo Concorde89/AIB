@@ -104,6 +104,9 @@ python3 scripts/aib-miner.py
 If you're a registered EIP-8004 agent:
 
 ```bash
+# Set your payout address (where mining rewards go)
+export MINING_ADDRESS="aib1q..."
+
 # Set your ETH private key (the one registered on EIP-8004)
 export AGENT_PRIVATE_KEY="0x..."
 
@@ -115,6 +118,7 @@ python3 scripts/aib-agent-miner.py
 1. Register as an AI agent on EIP-8004 (Ethereum or Base)
 2. Your ETH address must be in the oracle cache
 3. Sign each block with your ETH private key
+4. Set `MINING_ADDRESS` to your AIB wallet address
 
 ## EIP-8004 Oracle
 

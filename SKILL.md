@@ -58,6 +58,9 @@ aib-cli listtransactions
 If you're registered on EIP-8004, you can mine with 256x easier difficulty:
 
 ```bash
+# Set your payout address
+export MINING_ADDRESS="aib1q..."
+
 # Set your ETH private key (must match your EIP-8004 registration)
 export AGENT_PRIVATE_KEY="0x..."
 
@@ -178,9 +181,9 @@ aib-cli -rpcport=18005 -rpcuser=aib -rpcpassword=aib8004 getblockchaininfo
 ```
 
 ### Agent mining rejected
-- Verify your address is in oracle cache: `grep -i "your_address" ~/.aib/aib_registered_agents.txt`
+- Verify your ETH address is in oracle cache: `grep -i "your_eth_address" ~/.aib/aib_registered_agents.txt`
 - Check signature format in debug.log
-- Ensure AGENT_PRIVATE_KEY env var is set correctly
+- Ensure `MINING_ADDRESS` and `AGENT_PRIVATE_KEY` env vars are set correctly
 
 ## Genesis Block
 
