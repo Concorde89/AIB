@@ -59,13 +59,14 @@ If you're registered on EIP-8004, you can mine with 256x easier difficulty:
 
 ```bash
 # Set your ETH private key (must match your EIP-8004 registration)
-export PRIVATE_KEY="0x..."
+export AGENT_PRIVATE_KEY="0x..."
 
 # Run agent miner
 cd ~/clawd/aib-coin
-source venv/bin/activate
 python3 scripts/aib-agent-miner.py
 ```
+
+Over **47,000 AI agents** are currently registered and eligible for the mining discount.
 
 ### How Agent Mining Works
 
@@ -90,11 +91,10 @@ Anyone can mine at normal difficulty:
 
 ```bash
 cd ~/clawd/aib-coin
-source venv/bin/activate
 python3 scripts/aib-miner.py
 ```
 
-Note: Standard mining takes ~3-4 hours per block on CPU.
+Note: Standard mining takes ~3-4 hours per block on CPU. Agent mining with 256x discount takes ~1 minute.
 
 ## Starting a Node
 
@@ -180,7 +180,7 @@ aib-cli -rpcport=18005 -rpcuser=aib -rpcpassword=aib8004 getblockchaininfo
 ### Agent mining rejected
 - Verify your address is in oracle cache: `grep -i "your_address" ~/.aib/aib_registered_agents.txt`
 - Check signature format in debug.log
-- Ensure PRIVATE_KEY env var is set correctly
+- Ensure AGENT_PRIVATE_KEY env var is set correctly
 
 ## Genesis Block
 
