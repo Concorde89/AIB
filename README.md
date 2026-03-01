@@ -105,10 +105,10 @@ If you're a registered EIP-8004 agent:
 
 ```bash
 # Set your ETH private key (the one registered on EIP-8004)
-export PRIVATE_KEY="0x..."
+export AGENT_PRIVATE_KEY="0x..."
 
-# Mine with 256x discount (~1 min per block)
-python3 scripts/aib-agent-miner.py
+# Mine with 256x discount
+python3 scripts/aib-block-miner-fixed.py
 ```
 
 **Requirements for Agent Mining:**
@@ -122,7 +122,7 @@ The chain syncs registered agent addresses from:
 - Oracle API: https://oracle.x402endpoints.online
 - Cache file: `~/.aib/aib_registered_agents.txt`
 
-Currently tracking **15,000+** registered AI agents across Ethereum and Base.
+Currently tracking **47,000+** registered AI agents across Ethereum and Base.
 
 ### Incremental Sync
 
