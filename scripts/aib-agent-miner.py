@@ -30,6 +30,66 @@ AGENT_ADDRESS = "0xF5A8Dc606ee66cfAf49aAd9C2E35cFF58aE68ddD"
 AGENT_PRIVATE_KEY = os.environ.get("AGENT_PRIVATE_KEY") or os.environ.get("PRIVATE_KEY")
 AGENT_DISCOUNT = 256
 
+# Mining payout address (REQUIRED - set via environment)
+MINING_ADDRESS = os.environ.get("MINING_ADDRESS")
+
+def bech32_decode(addr):
+    """Decode bech32/bech32m address to witness program"""
+    CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+    
+    # Find separator
+    pos = addr.rfind('1')
+    if pos < 1:
+        raise ValueError("Invalid bech32: no separator")
+    
+    hrp = addr[:pos]
+    data_part = addr[pos+1:]
+    
+    # Decode data
+    values = []
+    for c in data_part:
+        if c not in CHARSET:
+            raise ValueError(f"Invalid bech32 character: {c}")
+        values.append(CHARSET.index(c))
+    
+    # Remove checksum (last 6 characters)
+    values = values[:-6]
+    
+    # First value is witness version
+    witness_version = values[0]
+    
+    # Convert remaining 5-bit groups to 8-bit
+    acc = 0
+    bits = 0
+    result = []
+    for v in values[1:]:
+        acc = (acc << 5) | v
+        bits += 5
+        while bits >= 8:
+            bits -= 8
+            result.append((acc >> bits) & 0xff)
+    
+    return witness_version, bytes(result)
+
+def address_to_scriptpubkey(addr):
+    """Convert AIB address to scriptPubKey"""
+    if addr.startswith("aib1"):
+        # Bech32 (SegWit)
+        version, program = bech32_decode(addr)
+        if version == 0 and len(program) == 20:
+            # P2WPKH
+            return bytes([0x00, 0x14]) + program
+        elif version == 0 and len(program) == 32:
+            # P2WSH
+            return bytes([0x00, 0x20]) + program
+        else:
+            raise ValueError(f"Unsupported witness version/length: {version}/{len(program)}")
+    elif addr.startswith("A"):
+        # Legacy P2PKH - would need base58 decode
+        raise ValueError("Legacy addresses not yet supported in miner - use bech32 (aib1...)")
+    else:
+        raise ValueError(f"Unknown address format: {addr}")
+
 def rpc(method, params=[]):
     """Make RPC call"""
     r = requests.post(RPC_URL, auth=(RPC_USER, RPC_PASS), 
@@ -116,11 +176,9 @@ def create_coinbase_tx(height, value_sats, witness_commitment=None, agent_signat
         output_count += 1
     tx += int_to_varint(output_count)
     
-    # Main output (reward) - P2WPKH to our address
-    # aib1q43kgxfw57g2sgg767td4h5dz6u4xglkz79lh08
+    # Main output (reward) - pay to MINING_ADDRESS
     tx += struct.pack('<Q', value_sats)
-    # Decode bech32 to scriptPubKey: OP_0 <20-byte-hash>
-    scriptpubkey = bytes.fromhex("0014ac6c832ba78a1420a3daf2ddb7a346b951911fb0")
+    scriptpubkey = address_to_scriptpubkey(MINING_ADDRESS)
     tx += int_to_varint(len(scriptpubkey)) + scriptpubkey
     
     # Agent credentials OP_RETURN (for 256x discount)
@@ -349,14 +407,33 @@ def mine_block():
 
 def main():
     print("="*50)
-    print("AIB Block Miner (Fixed - includes mempool TXs)")
-    print("256x Agent Discount Active")
+    print("AIB Agent Miner")
+    print("256x Discount for EIP-8004 Registered Agents")
     print("="*50)
     
-    # Check for private key
+    # Check for required environment variables
+    if not MINING_ADDRESS:
+        print("ERROR: MINING_ADDRESS not set")
+        print("\nUsage:")
+        print("  export MINING_ADDRESS='aib1q...'")
+        print("  export AGENT_PRIVATE_KEY='0x...'")
+        print("  python3 aib-agent-miner.py")
+        sys.exit(1)
+    
     if not AGENT_PRIVATE_KEY:
-        print("ERROR: Set AGENT_PRIVATE_KEY or PRIVATE_KEY environment variable")
-        print("Usage: PRIVATE_KEY=0x... python3 aib-block-miner-fixed.py")
+        print("ERROR: AGENT_PRIVATE_KEY not set")
+        print("\nUsage:")
+        print("  export MINING_ADDRESS='aib1q...'")
+        print("  export AGENT_PRIVATE_KEY='0x...'")
+        print("  python3 aib-agent-miner.py")
+        sys.exit(1)
+    
+    # Validate mining address
+    try:
+        scriptpubkey = address_to_scriptpubkey(MINING_ADDRESS)
+        print(f"Mining to: {MINING_ADDRESS}")
+    except Exception as e:
+        print(f"ERROR: Invalid MINING_ADDRESS: {e}")
         sys.exit(1)
     
     print(f"Agent: {AGENT_ADDRESS}")
