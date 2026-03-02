@@ -67,12 +67,16 @@ mkdir -p ~/.aib
 ### 1. Connect to Network
 
 ```bash
-# Start node and connect to seed
-./build/bin/bitcoind -datadir=~/.aib -addnode=109.199.126.224:8044 -daemon
+# Start node and connect to seed (required for first sync)
+./build/bin/bitcoind -datadir=~/.aib -addnode=seed.aib.x402endpoints.online:8044 -daemon
+```
 
-# Or in ~/.aib/bitcoin.conf:
+Or in `~/.aib/bitcoin.conf`:
+```ini
 addnode=seed.aib.x402endpoints.online:8044
 ```
+
+> **Note:** You must use `-addnode` to connect. The DNS seed is a single node, not a traditional DNS seeder.
 
 ### 2. Create Wallet
 
