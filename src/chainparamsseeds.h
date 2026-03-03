@@ -10,9 +10,11 @@
  */
 
 // AIB mainnet: No fixed seeds - use DNS seeder only
-static const uint8_t chainparams_seed_main[] = {};
+// Note: Single null byte to satisfy C++ zero-length array restriction
+// Seed loading code treats this as empty (size < minimum BIP155 entry)
+static const uint8_t chainparams_seed_main[] = {0x00};
 
 // AIB testnet: No fixed seeds
-static const uint8_t chainparams_seed_test[] = {};
+static const uint8_t chainparams_seed_test[] = {0x00};
 
 #endif // BITCOIN_CHAINPARAMSSEEDS_H

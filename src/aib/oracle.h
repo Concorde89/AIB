@@ -79,7 +79,7 @@ struct MinerCredentials {
  * Expected format: 0x{40 hex chars}:{130 hex chars signature}
  * Example: 0x1234...abcd:abc123...def (address:signature)
  * 
- * @param coinbase_script The coinbase scriptSig bytes
+ * @param script_data The coinbase scriptSig bytes
  * @return Parsed credentials (check .valid field)
  */
 MinerCredentials ExtractMinerCredentials(const std::vector<unsigned char>& script_data);
