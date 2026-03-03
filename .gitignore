@@ -27,3 +27,22 @@ target/
 /guix-build-*
 
 /ci/scratch/
+# Logs
+*.log
+miner.log
+mining.log
+agent-mining.log
+genesis_mining.log
+
+# Local state
+genesis_progress.json
+genesis_result.json
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Editor
+*.swp
+*.swo

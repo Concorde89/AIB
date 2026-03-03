@@ -1,7 +1,29 @@
 #!/usr/bin/env python3
 """
-AIB Block Miner - Fixed version that includes mempool transactions
-Uses getblocktemplate properly with agent signature for 256x discount
+AIB Agent Miner - CPU miner for AI Bitcoin with EIP-8004 agent discount
+
+Registered AI agents (via oracle.x402endpoints.online) get 256x easier
+mining difficulty, enabling CPU mining to compete with GPU/ASIC miners.
+
+Requirements:
+    pip install eth_account requests
+
+Environment Variables:
+    AGENT_PRIVATE_KEY   - Ethereum private key (0x...) for signing blocks
+    MINING_ADDRESS      - AIB address to receive mining rewards (aib1q...)
+    AIB_RPC_URL         - Node RPC endpoint (default: http://127.0.0.1:18005)
+    AIB_RPC_USER        - RPC username (default: aib)
+    AIB_RPC_PASS        - RPC password (default: aib8004)
+
+Usage:
+    export AGENT_PRIVATE_KEY='0x...'
+    export MINING_ADDRESS='aib1q...'
+    python3 aib-agent-miner.py
+
+The agent address is derived from AGENT_PRIVATE_KEY and must be registered
+in the EIP-8004 oracle to receive the 256x mining discount.
+
+Register at: https://oracle.x402endpoints.online
 """
 
 import hashlib
@@ -20,14 +42,14 @@ except ImportError:
     print("ERROR: pip install eth_account")
     sys.exit(1)
 
-# RPC Configuration
-RPC_URL = "http://127.0.0.1:18005"
-RPC_USER = "aib"
-RPC_PASS = "aib8004"
+# RPC Configuration (override via environment)
+RPC_URL = os.environ.get("AIB_RPC_URL", "http://127.0.0.1:18005")
+RPC_USER = os.environ.get("AIB_RPC_USER", "aib")
+RPC_PASS = os.environ.get("AIB_RPC_PASS", "aib8004")
 
-# Agent for 256x discount
-AGENT_ADDRESS = "0xF5A8Dc606ee66cfAf49aAd9C2E35cFF58aE68ddD"
+# Agent for 256x discount (address derived from private key)
 AGENT_PRIVATE_KEY = os.environ.get("AGENT_PRIVATE_KEY") or os.environ.get("PRIVATE_KEY")
+AGENT_ADDRESS = Account.from_key(AGENT_PRIVATE_KEY).address if AGENT_PRIVATE_KEY else None
 AGENT_DISCOUNT = 256
 
 # Mining payout address (REQUIRED - set via environment)
@@ -333,10 +355,17 @@ def mine_block():
     
     merkle_root = build_merkle_root(tx_hashes)
     
-    # Target with agent discount
-    target = int("00000000ffff0000000000000000000000000000000000000000000000000000", 16)
-    target *= AGENT_DISCOUNT
-    print(f"Agent discount: {AGENT_DISCOUNT}x")
+    # Calculate target from bits (compact target format)
+    exponent = bits >> 24
+    mantissa = bits & 0xffffff
+    if exponent <= 3:
+        base_target = mantissa >> (8 * (3 - exponent))
+    else:
+        base_target = mantissa << (8 * (exponent - 3))
+    
+    # Apply agent discount (256x easier = target * 256)
+    target = base_target * AGENT_DISCOUNT
+    print(f"Agent discount: {AGENT_DISCOUNT}x (target from bits 0x{bits:08x})")
     
     # Prepare header components
     prev_hash_bytes = unhexlify(prev_hash)[::-1]
