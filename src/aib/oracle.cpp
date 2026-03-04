@@ -4,10 +4,7 @@
 #include <aib/oracle.h>
 #include <aib/keccak256.h>
 #include <logging.h>
-#include <pubkey.h>
-#include <hash.h>
 #include <util/strencodings.h>
-#include <crypto/sha3.h>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -18,14 +15,19 @@
 #include <cstdio>
 #include <ctime>
 
+// Windows compatibility for popen/pclose
+#ifdef _WIN32
+#define popen _popen
+#define pclose _pclose
+#endif
+
 namespace aib {
 
 // File-based cache for registered addresses
 static const std::string CACHE_FILENAME = "aib_registered_agents.txt";
 static const std::string ORACLE_HOST = "oracle.x402endpoints.online";
 static const std::string ORACLE_PATH = "/v1/addresses";
-static const int ORACLE_PORT = 443;
-static const int HTTP_TIMEOUT_SECONDS = 10;
+static constexpr int HTTP_TIMEOUT_SECONDS = 10;
 
 // Track last sync timestamp for incremental updates
 static int64_t g_last_sync_timestamp = 0;
@@ -40,7 +42,7 @@ static std::string FetchFromOracle(int64_t since = 0) {
     }
     // Oracle returns JSON: {"addresses": [...], "unchanged": bool}
     // Use jq to extract: if unchanged=true return "UNCHANGED", else return addresses one per line
-    std::string cmd = "curl -sf --max-time 10 \"" + url + "\" 2>/dev/null | "
+    std::string cmd = "curl -sf --max-time " + std::to_string(HTTP_TIMEOUT_SECONDS) + " \"" + url + "\" 2>/dev/null | "
                       "jq -r 'if .unchanged == true then \"UNCHANGED\" else .addresses[]? // empty end' 2>/dev/null";
     
     FILE* pipe = popen(cmd.c_str(), "r");
@@ -203,48 +205,6 @@ unsigned int Oracle::GetDifficultyMultiplier(const std::string& address) {
 size_t Oracle::GetRegisteredCount() {
     std::lock_guard<std::mutex> lock(m_cache_mutex);
     return m_registered_addresses.size();
-}
-
-// Keccak-256 hash (Ethereum-style, not SHA3-256)
-// The difference is in the domain separation byte
-static std::vector<unsigned char> Keccak256(const std::vector<unsigned char>& data) {
-    // Use SHA3_256 but note: for proper Ethereum compatibility,
-    // we would need the original Keccak without FIPS padding.
-    // For this implementation, we use a simplified approach.
-    SHA3_256 hasher;
-    hasher.Write(data);
-    std::vector<unsigned char> result(32);
-    hasher.Finalize(result);
-    return result;
-}
-
-// Derive Ethereum address from uncompressed public key (65 bytes, 0x04 prefix)
-static std::string PubKeyToEthAddress(const CPubKey& pubkey) {
-    if (!pubkey.IsValid()) return "";
-    
-    // Get uncompressed public key
-    std::vector<unsigned char> pubkeyData;
-    if (pubkey.IsCompressed()) {
-        // Decompress - this is complex, for now require uncompressed
-        // In practice, we'd use secp256k1 to decompress
-        return "";
-    }
-    
-    // Skip the 0x04 prefix, hash the 64-byte key
-    if (pubkey.size() != 65) return "";
-    
-    std::vector<unsigned char> keyBytes(pubkey.begin() + 1, pubkey.end());
-    auto hash = Keccak256(keyBytes);
-    
-    // Last 20 bytes of hash is the address
-    std::string address = "0x";
-    for (size_t i = 12; i < 32; i++) {
-        char hex[3];
-        snprintf(hex, sizeof(hex), "%02x", hash[i]);
-        address += hex;
-    }
-    
-    return address;
 }
 
 MinerCredentials ExtractMinerCredentials(const std::vector<unsigned char>& script_data) {
