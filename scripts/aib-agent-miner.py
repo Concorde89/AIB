@@ -51,6 +51,7 @@ RPC_PASS = os.environ.get("AIB_RPC_PASS", "aib8004")
 AGENT_PRIVATE_KEY = os.environ.get("AGENT_PRIVATE_KEY") or os.environ.get("PRIVATE_KEY")
 AGENT_ADDRESS = Account.from_key(AGENT_PRIVATE_KEY).address if AGENT_PRIVATE_KEY else None
 AGENT_DISCOUNT = 256
+TIP_CHECK_INTERVAL = 5  # seconds between chain-tip checks during mining
 
 # Mining payout address (REQUIRED - set via environment)
 MINING_ADDRESS = os.environ.get("MINING_ADDRESS")
@@ -373,6 +374,7 @@ def mine_block():
     print(f"Mining...")
     nonce = 0
     start = time.time()
+    last_tip_check = start
     
     while True:
         # Build header
@@ -428,6 +430,20 @@ def mine_block():
         if nonce % 2000000 == 0:
             elapsed = time.time() - start
             print(f"  {nonce//1000000}M nonces @ {nonce/elapsed:,.0f} H/s")
+        
+        # Stale-template guard: if another miner extended the chain,
+        # abort and let the outer loop fetch a fresh template.
+        now = time.time()
+        if now - last_tip_check > TIP_CHECK_INTERVAL:
+            last_tip_check = now
+            try:
+                tip = rpc("getblockchaininfo")["bestblockhash"]
+                if tip != prev_hash:
+                    print(f"\n\u23ed  Tip changed ({prev_hash[:16]}... -> {tip[:16]}...) "
+                          f"after nonce={nonce}, elapsed={now-start:.1f}s -- restarting")
+                    return False
+            except Exception:
+                pass  # transient RPC error, keep mining
         
         if nonce > 0xFFFFFFFF:
             print("Nonce overflow, updating time...")

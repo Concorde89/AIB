@@ -132,10 +132,12 @@ def mine_block(payout_address):
     merkle = txid
     bits_bytes = struct.pack("<I", bits_int)
     
+    TIP_CHECK_INTERVAL = 5  # seconds between chain-tip checks
     print("Mining...")
     nonce = 0
     start = time.time()
     last_report = start
+    last_tip_check = start
     
     while True:
         curtime = int(time.time())
@@ -179,6 +181,19 @@ def mine_block(payout_address):
         nonce += 1
         if nonce >= 0xFFFFFFFF:
             nonce = 0
+        
+        # Stale-template guard: poll chain tip every TIP_CHECK_INTERVAL seconds.
+        now = time.time()
+        if now - last_tip_check > TIP_CHECK_INTERVAL:
+            last_tip_check = now
+            try:
+                tip = rpc("getblockchaininfo")["bestblockhash"]
+                if tip != prev_hash:
+                    print(f"\n\u23ed  Tip changed ({prev_hash[:16]}... -> {tip[:16]}...) "
+                          f"after nonce={nonce}, elapsed={now-start:.1f}s -- restarting")
+                    return False
+            except Exception:
+                pass
             # Update time to get new block template
         
         # Progress report
