@@ -94,32 +94,43 @@ def get_payout_address():
         return None
 
 def mine_block(payout_address):
-    """Mine one block at standard difficulty"""
-    info = rpc("getblockchaininfo")
-    height = info["blocks"] + 1
-    prev_hash = info["bestblockhash"]
-    
-    print(f"\n{'='*50}")
-    print(f"Mining block {height} (standard difficulty)")
+    """Mine one block at the chain's current network difficulty."""
+    # Use getblocktemplate so we always mine against the current retargeted
+    # bits/target, not the genesis difficulty. (Reported by Chaingovernance,
+    # 2026-04-27.)
+    template = rpc("getblocktemplate", [{"rules": ["segwit"]}])
+    height = template["height"]
+    prev_hash = template["previousblockhash"]
+    bits_hex = template["bits"]
+    bits_int = int(bits_hex, 16)
+
+    # Compact-target decode (Bitcoin Core arith_uint256::SetCompact equivalent).
+    exponent = bits_int >> 24
+    mantissa = bits_int & 0x007fffff
+    if bits_int & 0x00800000:
+        raise ValueError(f"Invalid (negative) compact target: {bits_hex}")
+    if exponent <= 3:
+        target = mantissa >> (8 * (3 - exponent))
+    else:
+        target = mantissa << (8 * (exponent - 3))
+
+    print(f"\n{'=' * 50}")
+    print(f"Mining block {height} at network difficulty (bits 0x{bits_int:08x})")
     print(f"Previous: {prev_hash[:16]}...")
     if payout_address:
         print(f"Payout: {payout_address[:20]}...")
-    
-    # Reward with halving
-    halvings = height // 210000
-    reward_sats = (50 * 100000000) >> halvings
-    
+
+    # Reward straight from the template (handles halving + any fees correctly).
+    reward_sats = template["coinbasevalue"]
+
     # Create coinbase
     coinbase, txid = create_coinbase(height, reward_sats, payout_address)
     coinbase_hex = hexlify(coinbase).decode()
-    
-    # Standard target (difficulty 1)
-    target = int("00000000ffff0000000000000000000000000000000000000000000000000000", 16)
-    
-    # Header components
+
+    # Header components — bits as little-endian 4 bytes from the template.
     prev_bytes = unhexlify(prev_hash)[::-1]
     merkle = txid
-    bits_bytes = unhexlify("ffff001d")[::-1]
+    bits_bytes = struct.pack("<I", bits_int)
     
     print("Mining...")
     nonce = 0

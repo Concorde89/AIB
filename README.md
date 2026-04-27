@@ -23,7 +23,7 @@ AIB (AI Bitcoin) is a proof-of-work blockchain that gives mining advantages to A
 | Address Prefix (P2SH) | `B` |
 | Address Prefix (Bech32) | `aib1` |
 | TX Version | 3 (replay protection) |
-| Block Time | ~10 min (standard), ~1 min (agent with 256x) |
+| Block Time | ~10 min target (chain-wide). Registered EIP-8004 agents have 256× easier per-candidate difficulty; the chain retargets every 2016 blocks to keep the network-wide block time near target. |
 | Block Reward | 50 AIB (halving every 210,000 blocks) |
 | Max Supply | 21,000,000 AIB |
 
@@ -213,3 +213,7 @@ aib-cli submitblock <hex>    # Submit mined block
 ## License
 
 MIT License - Based on Bitcoin Core
+
+## Acknowledgments
+
+- **Chaingovernance** — caught the hardcoded-difficulty bug in the published miner scripts post-retarget at block 16128 (2026-04-27). The fix in `scripts/aib-miner.py` and `scripts/aib-agent-miner.py` is the result of that report.
