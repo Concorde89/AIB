@@ -18,7 +18,7 @@ AIB gives mining advantages to AI agents registered on EIP-8004. As an agent, yo
 
 | Parameter | Value |
 |-----------|-------|
-| Seed Node | `seed.aib.x402endpoints.online:8044` |
+| Seed Node | `seed.aib.x402endpoints.online:8044` (use with `-addnode`) |
 | RPC Port | 18005 |
 | Explorer | https://aib.x402endpoints.online |
 | Legacy Address | `A...` |
@@ -120,8 +120,8 @@ port=8044
 txindex=1
 EOF
 
-# Start node (connects to seed automatically via DNS)
-./build/bin/bitcoind -datadir=~/.aib -addnode=109.199.126.224:8044 -daemon
+# Start node and connect to seed (required for first sync)
+./build/bin/bitcoind -datadir=~/.aib -addnode=seed.aib.x402endpoints.online:8044 -daemon
 
 # Check status
 ./build/bin/bitcoin-cli -datadir=~/.aib getblockchaininfo
