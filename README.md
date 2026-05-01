@@ -54,15 +54,53 @@ git clone https://github.com/Concorde89/AIB.git
 cd AIB
 
 # Dependencies (Ubuntu/Debian)
-sudo apt install build-essential cmake libevent-dev libboost-dev libsqlite3-dev jq
+# Required: pkgconf is needed by cmake's FindPkgConfig; python3 by bundled scripts.
+# jq is REQUIRED (not optional) — the oracle bootstrap uses it to parse the agent list.
+sudo apt install build-essential cmake pkgconf python3 \
+    libevent-dev libboost-dev libsqlite3-dev libzmq3-dev jq
+
+# Sanity check
+command -v jq >/dev/null || { echo "ERROR: jq is required for the AIB oracle"; exit 1; }
 
 # Build
-cmake -B build
+# Cap'n Proto note: Ubuntu 22.04 / Debian 12 / Trixie ship libcapnp-dev 0.8.0,
+# which has CVE-2022-46149. Bitcoin Core's CMake check refuses to configure
+# against it, with: "The version of Cap'n Proto detected: 0.8.0 has known
+# compatibility issues". Use -DENABLE_IPC=OFF to skip the multiprocess feature
+# entirely (it is not needed for a regular full node — only for sandboxed
+# wallet/validation separation, which most operators don't use). To enable IPC
+# you would need to install Cap'n Proto >= 1.0 from source.
+cmake -B build -DENABLE_IPC=OFF -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DWITH_ZMQ=ON
 cmake --build build -j$(nproc)
 
 # Create data dir
 mkdir -p ~/.aib
 ```
+
+### 0. Pre-seed the oracle cache (REQUIRED for first start)
+
+Before starting `bitcoind` for the first time, fetch the registered-agent list into the local cache. **Skipping this leads to a rate-limit deadlock** — the node tries to fetch the registry on every rejected block, hits Cloudflare's 10 req / 60s limit, and never recovers (`AIB Oracle: No agents loaded - oracle and cache both failed`).
+
+```bash
+mkdir -p ~/.aib
+curl -sf "https://oracle.x402endpoints.online/v1/addresses" \
+    | jq -r '.addresses[]' \
+    > ~/.aib/aib_registered_agents.txt
+
+wc -l ~/.aib/aib_registered_agents.txt   # expect 30,000+ lines
+```
+
+If you forgot this and the node is already in a 429 loop:
+```bash
+aib-cli stop
+sleep 60                                  # let the rate limit reset
+curl -sf "https://oracle.x402endpoints.online/v1/addresses" \
+    | jq -r '.addresses[]' \
+    > ~/.aib/aib_registered_agents.txt
+~/aib-coin/build/bin/bitcoind -datadir=$HOME/.aib -daemon
+```
+
+> **Migration note:** the build system moved from autotools to CMake. Old tutorials with `./autogen.sh && ./configure --without-bdb --disable-bench --disable-tests` no longer apply — use `cmake -B build ...` as above. Boost is now header-only (`libboost-dev`); the per-component packages (`libboost-system-dev`, `-filesystem-dev`, `-test-dev`, `-thread-dev`) are no longer needed. `libssl-dev` is no longer required either.
 
 ### 1. Connect to Network
 
@@ -70,9 +108,13 @@ mkdir -p ~/.aib
 # Start node and connect to seed
 ./build/bin/bitcoind -datadir=~/.aib -addnode=109.199.126.224:8044 -daemon
 
-# Or in ~/.aib/bitcoin.conf:
+# Or in ~/.aib/bitcoin.conf (recommended for full setup):
 addnode=seed.aib.x402endpoints.online:8044
+rpcuser=aib
+rpcpassword=aib8004
 ```
+
+> **CLI auth:** The `bin/aib-cli` wrapper defaults to `AIB_RPCUSER=aib` and `AIB_RPCPASS=aib8004`, overridable via env vars: `AIB_RPCPASS=...`, `AIB_RPCUSER=...`, `AIB_DATADIR=...`, `AIB_RPCPORT=...`. If you set a different password in `bitcoin.conf`, either match it via `AIB_RPCPASS` or call `bitcoin-cli` directly with explicit `-rpcpassword`. Without explicit creds the daemon falls back to cookie auth and `aib-cli` calls fail.
 
 ### 2. Create Wallet
 
@@ -126,7 +168,7 @@ The chain syncs registered agent addresses from:
 - Oracle API: https://oracle.x402endpoints.online
 - Cache file: `~/.aib/aib_registered_agents.txt`
 
-Currently tracking **47,000+** registered AI agents across Ethereum and Base.
+Currently tracking **30,000+** registered AI agents across Ethereum and Base.
 
 ### Incremental Sync
 
