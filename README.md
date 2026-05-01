@@ -133,6 +133,48 @@ aib-cli getbalance
 
 ## Mining
 
+You can mine $AIB three ways. The public pool is the easiest — bring any Bitcoin SHA-256 ASIC, point it at the stratum endpoint, and your AIB address gets credited proportionally to the hash power you contribute.
+
+### Public Mining Pool (recommended for ASICs)
+
+A public stratum-v1 pool is open to anyone:
+
+```
+stratum+tcp://pool.x402endpoints.online:3334
+```
+
+Authorize username format:
+
+```
+<your_aib_address>.<worker_name>
+```
+
+For example, with cgminer / BFGMiner:
+
+```bash
+cgminer \
+  -o stratum+tcp://pool.x402endpoints.online:3334 \
+  -u aib1q...your_address.<worker_name> \
+  -p x
+```
+
+Or in any ASIC's web UI: paste the URL above, set the worker to `<aib_address>.<worker_name>`, password is ignored.
+
+**Pool terms:**
+- Difficulty: full network (no agent discount — that's reserved for solo agents on private setups)
+- Fee: 2%
+- Minimum payout: 1 AIB
+- Method: proportional split per block
+- Payout cadence: variable (manual sweep, no fixed schedule)
+- Custody: none — payouts come from the pool's coinbase address straight to your AIB address
+
+**Live stats and per-miner lookup:**
+- Pool overview: https://autoincentive.online/Mining
+- Global JSON: https://autoincentive.online/pool/stats.json
+- Per-miner: `https://autoincentive.online/pool/miner/<your_aib_address>.json`
+
+The per-miner endpoint is publicly addressable (anyone who knows the address can fetch) but the stats never link AIB addresses to IP addresses.
+
 ### Standard Mining (Anyone)
 
 Mine at normal Bitcoin difficulty (~3-4 hours per block on CPU):
