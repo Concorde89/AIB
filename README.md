@@ -57,7 +57,13 @@ cd AIB
 sudo apt install build-essential cmake libevent-dev libboost-dev libsqlite3-dev jq
 
 # Build
-cmake -B build
+# Note: -DENABLE_IPC=OFF skips Bitcoin Core's multi-process feature, which
+# requires Cap'n Proto 1.0+. Distros like Debian Trixie still ship Cap'n
+# Proto 0.8.0 (with known CVEs), so the bare `cmake -B build` will fail
+# there. Disabling IPC is fine for a regular full node — you only need
+# multi-process for sandboxed wallet/validation separation, which most
+# operators don't use.
+cmake -B build -DENABLE_IPC=OFF
 cmake --build build -j$(nproc)
 
 # Create data dir
@@ -74,9 +80,17 @@ mkdir -p ~/.aib
 Or in `~/.aib/bitcoin.conf`:
 ```ini
 addnode=seed.aib.x402endpoints.online:8044
+
+# Optional but recommended for the bin/aib-cli wrapper to work out of the box.
+# Without these, the wrapper defaults still send rpcuser=aib + rpcpassword=aib8004,
+# but the daemon may use cookie auth → `aib-cli` calls will fail.
+rpcuser=aib
+rpcpassword=aib8004
 ```
 
 > **Note:** You must use `-addnode` to connect. The DNS seed is a single node, not a traditional DNS seeder.
+
+> **CLI auth:** The `bin/aib-cli` wrapper defaults to `AIB_RPCUSER=aib` and `AIB_RPCPASS=aib8004` (overridable via env vars: `AIB_RPCPASS=...`, `AIB_RPCUSER=...`, `AIB_DATADIR=...`, `AIB_RPCPORT=...`). If you set a different password in `bitcoin.conf`, either match it via `AIB_RPCPASS` or call `bitcoin-cli` directly with explicit `-rpcpassword`.
 
 ### 2. Create Wallet
 
